@@ -48,8 +48,21 @@ app.get('/count', (req, res) => {
   }
 });
 
+// Route to download CSV file
+app.get('/download', (req, res) => {
+  try {
+    if (!fs.existsSync(CSV_FILE)) {
+      return res.status(404).json({ error: 'No responses yet' });
+    }
+    res.download(CSV_FILE, 'responses.csv');
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to download file' });
+  }
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
   console.log(`Responses will be saved to ${CSV_FILE}`);
+  console.log(`Download responses at http://localhost:${PORT}/download`);
 });
