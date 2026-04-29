@@ -1,47 +1,64 @@
 const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const cors = require('cors');
 
 const app = express();
-const PORT = 3000;
-const CSV_FILE = path.join(__dirname, 'responses.csv');
+const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/survey-app';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Initialize CSV file with header if it doesn't exist
-if (!fs.existsSync(CSV_FILE)) {
-  fs.writeFileSync(CSV_FILE, 'timestamp,response\n');
-}
+// MongoDB Schema
+const responseSchema = new mongoose.Schema({
+  timestamp: { type: Date, default: Date.now },
+  response: { type: String, required: true }
+});
+
+const Response = mongoose.model('Response', responseSchema);
+
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => {
+  console.log('Connected to MongoDB');
+})
+.catch((err) => {
+  console.error('MongoDB connection error:', err);
+  console.log('⚠️  Running without database. Set MONGODB_URI to enable persistence.');
+});
 
 // Route to handle survey submission
-app.post('/submit', (req, res) => {
-  const { response } = req.body;
+app.post('/submit', async (req, res) => {
+  try {
+    const { response } = req.body;
 
-  if (!response || response.trim() === '') {
-    return res.status(400).json({ error: 'Response cannot be empty' });
+    if (!response || response.trim() === '') {
+      return res.status(400).json({ error: 'Response cannot be empty' });
+    }
+
+    const newResponse = new Response({
+      response: response.trim()
+    });
+
+    await newResponse.save();
+    res.json({ success: true, message: 'Response saved successfully' });
+  } catch (err) {
+    console.error('Error saving response:', err);
+    res.status(500).json({ error: 'Failed to save response' });
   }
-
-  const timestamp = new Date().toISOString();
-  // Escape double quotes in response and wrap in quotes for CSV
-  const escapedResponse = `"${response.replace(/"/g, '""')}"`;
-  const csvLine = `${timestamp},${escapedResponse}\n`;
-
-  // Append to CSV file
-  fs.appendFileSync(CSV_FILE, csvLine);
-
-  res.json({ success: true, message: 'Response saved successfully' });
 });
 
 // Route to get response count
-app.get('/count', (req, res) => {
+app.get('/count', async (req, res) => {
   try {
-    const data = fs.readFileSync(CSV_FILE, 'utf-8');
-    const lines = data.trim().split('\n');
-    const count = Math.max(0, lines.length - 1); // Subtract 1 for header
+    const count = await Response.countDocuments();
     res.json({ count });
   } catch (err) {
     res.json({ count: 0 });
@@ -49,20 +66,40 @@ app.get('/count', (req, res) => {
 });
 
 // Route to download CSV file
-app.get('/download', (req, res) => {
+app.get('/download', async (req, res) => {
   try {
-    if (!fs.existsSync(CSV_FILE)) {
+    const responses = await Response.find({}).sort({ timestamp: 1 });
+
+    if (responses.length === 0) {
       return res.status(404).json({ error: 'No responses yet' });
     }
-    res.download(CSV_FILE, 'responses.csv');
+
+    // Generate CSV
+    let csv = 'timestamp,response\n';
+    responses.forEach((doc) => {
+      const timestamp = doc.timestamp.toISOString();
+      const escapedResponse = `"${doc.response.replace(/"/g, '""')}"`;
+      csv += `${timestamp},${escapedResponse}\n`;
+    });
+
+    // Send as download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=responses.csv');
+    res.send(csv);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to download file' });
+    console.error('Error downloading responses:', err);
+    res.status(500).json({ error: 'Failed to download responses' });
   }
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  console.log(`Responses will be saved to ${CSV_FILE}`);
+  console.log(`Database: ${mongoose.connection.readyState === 1 ? 'MongoDB' : 'Not connected'}`);
   console.log(`Download responses at http://localhost:${PORT}/download`);
 });
