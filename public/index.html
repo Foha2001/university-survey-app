@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>University Survey</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>University Survey</h1>
+      <p class="subtitle">Your feedback is important</p>
+      
+      <form id="surveyForm">
+        <div class="form-group">
+          <label for="response">Who is the most corrupted professor in your university?</label>
+          <textarea 
+            id="response" 
+            name="response" 
+            placeholder="Please share your response..." 
+            required
+            rows="4"
+          ></textarea>
+        </div>
+        
+        <button type="submit" class="btn">Submit Response</button>
+      </form>
+
+      <div id="message" class="message"></div>
+    </div>
+
+    <div class="footer">
+      <p>All responses are anonymous and confidential.</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
